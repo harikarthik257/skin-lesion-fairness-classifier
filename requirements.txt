@@ -1,0 +1,12 @@
+torch
+torchvision
+timm
+grad-cam
+gradio
+scikit-learn
+opencv-python
+pandas
+numpy
+matplotlib
+tqdm
+kagglehub

@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.Python
+*.egg-info/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Model checkpoints -- large binaries, not suited to git.
+# Regenerate via src/models/train_baseline.py and src/models/train_fairness.py,
+# or track with Git LFS if you want them versioned.
+*.pt
+*.pth
+*.ckpt
+
+# Note: src/data/processed/*.csv (the train/val/test manifests) ARE tracked --
+# they define the exact lesion-grouped split and matter for reproducibility.
+# Raw images aren't stored in the repo at all; kagglehub caches them outside the
+# project (~/.cache/kagglehub) and re-downloads automatically on first run.
+*.zip
+
+# Node (only used transiently for a design-reference CLI; not part of the app)
+node_modules/
+package-lock.json
+
+# Gradio
+gradio_cached_examples/
+flagged/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.claude/
+
+# Logs
+*.log
