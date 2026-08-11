@@ -114,16 +114,18 @@ def main():
     
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
-    
-    epochs = 15
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
-    
+
+    max_epochs = 20
+    patience = 5  # stop if val acc doesn't improve for this many consecutive epochs
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max_epochs)
+
     scaler = torch.cuda.amp.GradScaler(enabled=torch.cuda.is_available())
-    
+
     best_val_acc = 0.0
+    epochs_since_improvement = 0
     total_start_time = time.time()
-    
-    for epoch in range(epochs):
+
+    for epoch in range(max_epochs):
         model.train()
         train_loss = 0.0
         train_correct = 0
@@ -182,19 +184,23 @@ def main():
         val_acc = 100. * val_correct / val_total
         
         elapsed = time.time() - start_time
-        print(f"Epoch {epoch+1}/{epochs} | Time: {elapsed:.0f}s | "
+        print(f"Epoch {epoch+1}/{max_epochs} | Time: {elapsed:.0f}s | "
               f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.2f}% | "
               f"Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.2f}%")
-              
+
         if val_acc > best_val_acc:
             best_val_acc = val_acc
+            epochs_since_improvement = 0
             best_save_path = os.path.join(MODELS_DIR, "baseline_efficientnet_b4_best.pt")
             torch.save(model.state_dict(), best_save_path)
             print(f"  --> Saved new best model to {best_save_path}")
-            
-        epoch_save_path = os.path.join(MODELS_DIR, f"baseline_efficientnet_b4_epoch_{epoch+1}.pt")
-        torch.save(model.state_dict(), epoch_save_path)
-            
+        else:
+            epochs_since_improvement += 1
+            print(f"  No improvement for {epochs_since_improvement}/{patience} epochs.")
+            if epochs_since_improvement >= patience:
+                print(f"  Early stopping: no improvement in {patience} consecutive epochs.")
+                break
+
     total_time = time.time() - total_start_time
     print(f"\nTraining complete in {total_time/60:.2f} minutes! Best Val Acc: {best_val_acc:.2f}%")
 

@@ -67,6 +67,18 @@ class SkinDataset(Dataset):
         else:
             self.fitz_counts = {}
 
+        # Joint (skin-tone group, disease class) counts, for the joint weighted loss.
+        if 'fitzpatrick_group' in self.df.columns:
+            fitz_idx_col = self.df['fitzpatrick_group'].map(FITZ_MAPPING)
+            class_idx_col = self.df['class_label'].map(CLASS_MAPPING)
+            valid = fitz_idx_col.notna() & class_idx_col.notna()
+            pairs = zip(fitz_idx_col[valid].astype(int), class_idx_col[valid].astype(int))
+            self.joint_counts = {}
+            for g, c in pairs:
+                self.joint_counts[(g, c)] = self.joint_counts.get((g, c), 0) + 1
+        else:
+            self.joint_counts = {}
+
     def __len__(self):
         return len(self.df)
 
@@ -135,14 +147,36 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
     
-    # Compute Fitzpatrick group weights
-    counts = [train_ds.fitz_counts.get(k, 1) for k in ['Light (I-II)', 'Medium (III-IV)', 'Dark (V-VI)']]
-    total = sum(counts)
-    inv_freq = [total / max(c, 1) for c in counts]
-    mean_inv = sum(inv_freq) / len(inv_freq)
-    fitz_weights_tensor = torch.tensor([f / mean_inv for f in inv_freq], dtype=torch.float32).to(device)
-    
-    print("Fitzpatrick Group Weights (I-II, III-IV, V-VI):", fitz_weights_tensor.tolist())
+    # Joint (skin-tone group x disease-class) weighted loss. Some cells in this 3x7
+    # grid are tiny (e.g. Dark-skin Dermatofibroma may be single digits) -- naive
+    # inverse-frequency weighting on a cell that small would blow up and make training
+    # chase noise on a handful of examples. MIN_CELL_COUNT floors the count used for
+    # the inverse-frequency computation, and the final weight is capped, so rare cells
+    # get meaningfully upweighted without destabilizing the loss.
+    MIN_CELL_COUNT = 20
+    MAX_WEIGHT_RATIO = 5.0
+    num_groups = len(FITZ_MAPPING)
+    num_classes = len(CLASS_MAPPING)
+
+    joint_counts_matrix = torch.ones(num_groups, num_classes)
+    for (g, c), cnt in train_ds.joint_counts.items():
+        joint_counts_matrix[g, c] = cnt
+    total_samples = joint_counts_matrix.sum().item()
+    floored_counts = joint_counts_matrix.clamp(min=MIN_CELL_COUNT)
+    inv_freq_matrix = total_samples / floored_counts
+    joint_weights_tensor = (inv_freq_matrix / inv_freq_matrix.mean()).clamp(max=MAX_WEIGHT_RATIO).to(device)
+
+    print("Joint (Fitzpatrick group x class) sample counts:")
+    class_names = list(CLASS_MAPPING.keys())
+    print("           " + "  ".join(f"{c:>6}" for c in class_names))
+    for g, g_name in FITZ_NAMES.items():
+        row = "  ".join(f"{int(joint_counts_matrix[g, c].item()):>6}" for c in range(num_classes))
+        print(f"  {g_name:>8}  {row}")
+    print("Joint (Fitzpatrick group x class) weights (mean-normalized, capped at "
+          f"{MAX_WEIGHT_RATIO}x, floor count {MIN_CELL_COUNT}):")
+    for g, g_name in FITZ_NAMES.items():
+        row = "  ".join(f"{joint_weights_tensor[g, c].item():>6.2f}" for c in range(num_classes))
+        print(f"  {g_name:>8}  {row}")
     
     model = FairnessModel(num_classes=7).to(device)
 
@@ -190,16 +224,16 @@ def main():
                 
                 # Compute Focal Loss per sample
                 loss_per_sample = criterion(outputs, targets)
-                
-                # Apply per-group weights
+
+                # Apply joint (group, class) weights
                 sample_weights = torch.ones_like(loss_per_sample)
                 valid_mask = fitz_groups >= 0
                 if valid_mask.any():
-                    sample_weights[valid_mask] = fitz_weights_tensor[fitz_groups[valid_mask]]
-                
+                    sample_weights[valid_mask] = joint_weights_tensor[fitz_groups[valid_mask], targets[valid_mask]]
+
                 # Final mean loss for the batch
                 loss = (loss_per_sample * sample_weights).mean()
-                
+
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
@@ -239,8 +273,8 @@ def main():
                     sample_weights = torch.ones_like(loss_per_sample)
                     valid_mask = fitz_groups >= 0
                     if valid_mask.any():
-                        sample_weights[valid_mask] = fitz_weights_tensor[fitz_groups[valid_mask]]
-                    
+                        sample_weights[valid_mask] = joint_weights_tensor[fitz_groups[valid_mask], targets[valid_mask]]
+
                     loss = (loss_per_sample * sample_weights).mean()
                     
                 val_loss += loss.item() * inputs.size(0)

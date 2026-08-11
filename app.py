@@ -7,8 +7,12 @@ CSVs from src/outputs/), and Methodology. No GPU needed.
 Phase 2: live inference on the Diagnose tab -- upload an image, get a prediction,
 confidence, class-probability breakdown, Grad-CAM++ heatmap, estimated skin-tone
 group, and an optional MC-Dropout uncertainty estimate. Default inference mode is
-the fairness-corrected model + test-time augmentation (found in the ablation study
-to give the best balance of accuracy, melanoma recall, and fairness gap).
+the fairness-corrected model + test-time augmentation. NOTE: as of the joint
+skin-tone x class weighted loss retrain (see PATENT_FIXES.md), this no longer
+clearly beats plain baseline+TTA on accuracy or fairness gap in the current
+ablation -- it's kept as the default because the project's focus is the
+fairness-aware model, not because it's the top scorer this run. See the
+Fairness & Performance tab for the honest, current numbers.
 See WEBSITE_PLAN.md for the full design.
 """
 import os
@@ -138,10 +142,11 @@ button:focus-visible, a:focus-visible, [tabindex]:focus-visible {
 """
 
 # --- Live inference setup -------------------------------------------------------
-# Fairness + TTA was found (in the ablation study) to give the best balance of
-# accuracy, melanoma recall, and fairness gap among all tested variants, so it's
-# the default. MC-Dropout is offered as an alternate mode for an uncertainty
-# estimate, at a real latency cost (~30x slower).
+# The fairness-corrected model + TTA is the default since fairness is this project's
+# focus -- NOT because it's the top scorer in every ablation run (see PATENT_FIXES.md:
+# the joint skin-tone x class weighted retrain made plain baseline+TTA the current
+# accuracy/fairness-gap leader). MC-Dropout is offered as an alternate mode for an
+# uncertainty estimate, at a real latency cost (~30x slower).
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -342,8 +347,9 @@ def _model_metrics(df):
 
 
 def build_stat_tiles():
-    """Headline KPI row for the recommended production variant (Fairness + TTA),
-    with the plain baseline shown alongside each figure for context."""
+    """Headline KPI row for the app's default live-inference variant (Fairness + TTA),
+    with the plain baseline shown alongside each figure so the comparison is honest
+    even when baseline currently leads on a given metric."""
     best = _load_predictions('Fairness + TTA')
     baseline = _load_predictions('Baseline')
     if best is None or baseline is None:
@@ -357,7 +363,7 @@ def build_stat_tiles():
                 f'<div class="stat-value">{value}</div><div class="stat-sub">{sub}</div></div>')
 
     tiles = [
-        tile("Recommended model", "Fairness + TTA", "best balance in ablation study", highlight=True),
+        tile("Default model", "Fairness + TTA", "fairness-focused, not always the top scorer", highlight=True),
         tile("Overall accuracy", f"{bm['overall_acc']:.1f}%", f"baseline: {bl['overall_acc']:.1f}%"),
         tile("Melanoma recall", f"{bm['mel_recall']:.1f}%", f"baseline: {bl['mel_recall']:.1f}% (safety-critical)"),
         tile("Fairness gap", f"{bm['gap']:.1f} pts", f"baseline: {bl['gap']:.1f} pts (lower is better)"),
