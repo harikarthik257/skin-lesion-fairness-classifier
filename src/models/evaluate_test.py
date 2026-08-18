@@ -92,14 +92,24 @@ def main():
     parser.add_argument('--tta', action='store_true',
                          help="Test-time augmentation: average predictions over the "
                               "original image plus horizontal and vertical flips.")
+    parser.add_argument('--checkpoint', default=None,
+                         help="Override path to a checkpoint file (defaults to the "
+                              "registry entry for --model).")
+    parser.add_argument('--resolution', type=int, default=380,
+                         help="Input resolution to resize test images to (must match "
+                              "the resolution the checkpoint was trained/fine-tuned at).")
+    parser.add_argument('--tag', default=None,
+                         help="Extra suffix for output filenames, to avoid colliding "
+                              "with other evaluated variants of the same --model.")
     args = parser.parse_args()
 
-    model_cls, ckpt_name = MODEL_REGISTRY[args.model]
+    model_cls, default_ckpt_name = MODEL_REGISTRY[args.model]
+    ckpt_path = args.checkpoint if args.checkpoint else os.path.join(MODELS_DIR, default_ckpt_name)
 
     image_dict = find_image_paths()
 
     test_transform = transforms.Compose([
-        transforms.Resize((380, 380)),
+        transforms.Resize((args.resolution, args.resolution)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
@@ -112,7 +122,6 @@ def main():
     print(f"Using device: {device}")
 
     model = model_cls(num_classes=7).to(device)
-    ckpt_path = os.path.join(MODELS_DIR, ckpt_name)
     print(f"Loading {args.model} weights from {ckpt_path}...")
     model.load_state_dict(torch.load(ckpt_path, map_location=device, weights_only=True))
     model.eval()
@@ -154,7 +163,7 @@ def main():
                     'entropy': float(ent),
                 })
 
-    suffix = "_tta" if args.tta else ""
+    suffix = ("_tta" if args.tta else "") + (f"_{args.tag}" if args.tag else "")
     df = pd.DataFrame(results)
     out_csv = os.path.join(OUTPUTS_DIR, f"test_eval_{args.model}{suffix}_predictions.csv")
     df.to_csv(out_csv, index=False)

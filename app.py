@@ -46,6 +46,37 @@ CLASS_NAMES = {
     'AKIEC': "Actinic keratosis / Bowen's disease", 'BKL': 'Benign keratosis',
     'DF': 'Dermatofibroma', 'VASC': 'Vascular lesion',
 }
+
+CLASS_DESCRIPTIONS = {
+    'MEL': ("A malignant tumor of pigment-producing cells (melanocytes). The most "
+            "dangerous common skin cancer because it can spread to other organs if not "
+            "caught early, though it is highly treatable when detected while still "
+            "confined to the skin. Often (but not always) presents as a mole that is "
+            "asymmetric, has an irregular border, uneven color, or has changed recently."),
+    'NV': ("A common, ordinary mole -- a benign growth of melanocytes. The large majority "
+           "of moles are harmless and stable over time. This is the most frequent finding "
+           "in dermoscopy datasets, which is part of why it can be visually confused with "
+           "early melanoma."),
+    'BCC': ("The most common form of skin cancer. It grows slowly and almost never spreads "
+            "to other parts of the body, but can cause significant local tissue damage if "
+            "left untreated. Usually appears on sun-exposed skin as a pearly bump, a flat "
+            "scar-like area, or a sore that doesn't heal."),
+    'AKIEC': ("A pre-cancerous (actinic keratosis) or early in-situ (Bowen's disease) "
+              "lesion caused by cumulative sun damage. Not yet invasive cancer, but can "
+              "progress to squamous cell carcinoma if untreated, so it's usually monitored "
+              "or treated proactively."),
+    'BKL': ("A group of benign, non-cancerous growths (including seborrheic keratosis and "
+            "solar lentigo) that are extremely common, especially with age. They can look "
+            "concerning -- waxy, stuck-on, or irregularly pigmented -- but carry no cancer "
+            "risk themselves."),
+    'DF': ("A benign, firm nodule made of fibrous tissue, often on the legs, sometimes "
+           "following a minor injury like an insect bite. Harmless and typically left alone "
+           "unless it's bothersome."),
+    'VASC': ("A benign lesion made of blood vessels (e.g. angioma, hemangioma). Usually "
+             "red, purple, or blue in color due to the blood content, and not related to "
+             "pigment cells at all -- a different biological category from the other six "
+             "classes."),
+}
 GROUP_ORDER = ['Light (I-II)', 'Medium (III-IV)', 'Dark (V-VI)']
 
 # --- Design tokens (validated categorical/status palette; see dataviz skill) ----
@@ -247,12 +278,12 @@ def _confidence_badge(confidence):
 def predict(image, mode):
     empty_card = '<div class="result-card"><span class="result-sub">Upload an image first.</span></div>'
     if image is None:
-        return None, None, empty_card, "", ""
+        return None, None, empty_card, "", "", ""
 
     model, cam, load_error = _get_model()
     if load_error is not None:
         error_card = f'<div class="result-card"><span class="result-sub">Model failed to load: {load_error}</span></div>'
-        return None, None, error_card, "", ""
+        return None, None, error_card, "", "", ""
 
     pil_image = image.convert('RGB')
     resized_for_display = pil_image.resize((380, 380))
@@ -308,7 +339,13 @@ def predict(image, mode):
         f'({"TTA-averaged" if mode != "Uncertainty-aware (MC-Dropout, ~30x slower)" else "MC-Dropout-averaged"})</div>'
         f'</div>'
     )
-    return heatmap, prob_chart, prediction_html, fitz_text, uncertainty_text
+    description_html = (
+        f'<div class="result-card">'
+        f'<div class="result-sub"><b>About {CLASS_NAMES[pred_code]}:</b> '
+        f'{CLASS_DESCRIPTIONS[pred_code]}</div>'
+        f'</div>'
+    )
+    return heatmap, prob_chart, prediction_html, fitz_text, uncertainty_text, description_html
 
 
 # Display name -> predictions CSV, covering every variant from the ablation study.
@@ -611,6 +648,7 @@ def build_app():
                         predict_btn = gr.Button("🔍 Diagnose", variant="primary")
                     with gr.Column(scale=1):
                         prediction_output = gr.HTML(label="Prediction")
+                        description_output = gr.HTML(label="About this condition")
                         uncertainty_output = gr.HTML(label="Uncertainty")
                         fitz_output = gr.HTML(label="Estimated skin tone")
                 with gr.Row():
@@ -621,7 +659,7 @@ def build_app():
                     fn=predict,
                     inputs=[image_input, mode_input],
                     outputs=[heatmap_output, prob_output, prediction_output,
-                             fitz_output, uncertainty_output],
+                             fitz_output, uncertainty_output, description_output],
                 )
 
             with gr.Tab("📊 Fairness & Performance"):

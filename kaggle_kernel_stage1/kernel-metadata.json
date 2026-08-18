@@ -1,0 +1,19 @@
+{
+  "id": "rbharikarthik/skin-lesion-fairness-stage1-res456",
+  "title": "Skin Lesion Fairness Stage1 Res456",
+  "code_file": "kaggle_train_stage1.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "kmader/skin-cancer-mnist-ham10000",
+    "andrewmvd/isic-2019",
+    "rbharikarthik/skin-lesion-fairness-manifests",
+    "rbharikarthik/skin-lesion-fairness-checkpoints"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

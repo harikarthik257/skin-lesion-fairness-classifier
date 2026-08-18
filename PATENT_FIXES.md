@@ -66,3 +66,31 @@ in `archive_pre_joint_weighting/` for comparison either way.
       keep-vs-revert decision above is made).
 - [ ] Update `app.py` dashboard/model paths if the decision changes which checkpoints
       are canonical (currently `src/models/*_best.pt` = the NEW joint-weighted models).
+
+## Staged accuracy-improvement plan (Aug 2026)
+
+Constraint: must stay a CNN with BatchNorm (patent title), so backbone options are
+limited to CNNs (no ViT/Swin). Plan: resolution bump -> extra ISIC melanoma data ->
+EfficientNetV2-S backbone swap -> ensembling, each stage isolated and reported before
+deciding whether to keep it.
+
+### Stage 1: resolution bump 380 -> 456 (fairness model only)
+
+Warm-started the fairness model from the existing, unchanged 380-trained baseline
+checkpoint and fine-tuned at 456x456 (FixRes-style — EfficientNet is fully
+convolutional until global pooling, so this is architecturally valid). Baseline was
+NOT retrained, to isolate the resolution variable.
+
+| Variant | Overall | MEL Recall | Light | Medium | Dark | Gap |
+|---|---|---|---|---|---|---|
+| Fairness 380 (prior) | 74.68% | 62.54% | 74.40% | 80.30% | 69.78% | 10.52 |
+| Fairness 380+TTA (prior) | 75.08% | 62.83% | 74.62% | 80.49% | 71.52% | 8.97 |
+| **Fairness 456 (Stage 1)** | **75.70%** | **59.59%** | 75.47% | 80.49% | 71.52% | 8.97 |
+| **Fairness 456+TTA (Stage 1)** | **76.75%** | **61.50%** | 76.49% | 81.43% | 72.83% | 8.60 |
+| (reference) Baseline 380+TTA | 75.97% | 62.83% | 76.42% | 78.05% | 70.87% | 7.18 |
+
+Mixed result: overall accuracy and fairness gap both improved (Fairness 456+TTA is now
+the best single model overall, 76.75%, beating the previous best baseline+TTA at
+75.97%), but **melanoma recall dropped** (62.83% -> 61.50% with TTA, 62.54% -> 59.59%
+without) — the opposite direction from the metric we're actually trying to move.
+Decision on whether to keep the resolution bump pending user review.
